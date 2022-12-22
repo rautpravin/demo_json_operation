@@ -48,7 +48,7 @@ def update_data(data, updated_data):
 class UpdateJSON(View):
 
     def get(self, request):
-        return render(request, 'index.html')
+        return render(request, 'update_json.html')
 
     def post(self, request):
         action = request.POST.get('action', 0)
@@ -64,11 +64,11 @@ class UpdateJSON(View):
                 with open(os.path.join(settings.MEDIA_ROOT, filename), 'r') as f:
                     show_data = f.read()
 
-                return render(request, 'index.html', {
+                return render(request, 'update_json.html', {
                     'filename': filename, 'show_data': show_data
                 })
             except Exception as e:
-                return render(request, 'index.html', {'error': str(e)})
+                return render(request, 'update_json.html', {'error': str(e)})
 
         elif action == '2':
             try:
@@ -77,7 +77,7 @@ class UpdateJSON(View):
                 filename = request.POST.get('filename')
 
                 if not os.path.exists(os.path.join(settings.MEDIA_ROOT, filename)):
-                    return render(request, 'index.html', {'error', 'file not exists!'})
+                    return render(request, 'update_json.html', {'error', 'file not exists!'})
 
                 with open(os.path.join(settings.MEDIA_ROOT, filename), 'r') as f:
                     show_data = f.read()
@@ -90,13 +90,13 @@ class UpdateJSON(View):
                             extracted_data = f'"{extracted_data}"'
                         s += key + ' = '+str(extracted_data) + '\n'
 
-                    return render(request, 'index.html', {
+                    return render(request, 'update_json.html', {
                         'filename': filename, 'keys_to_update': ', '.join(keys_to_update), 'show_data': show_data, 'script_block': s
                     })
             except IsADirectoryError as e:
-                return render(request, 'index.html', {'error': 'Please upload a file before proceed!'})
+                return render(request, 'update_json.html', {'error': 'Please upload a file before proceed!'})
             except Exception as e:
-                return render(request, 'index.html', {'error': e})
+                return render(request, 'update_json.html', {'error': e})
 
         elif action == '3':
             try:
@@ -108,7 +108,7 @@ class UpdateJSON(View):
                     show_data = json.loads(f.read())
 
                 if not temp_keys.strip():
-                    return render(request, 'index.html', {
+                    return render(request, 'update_json.html', {
                         'filename': filename,
                         'keys_to_update': ', '.join(script_block),
                         'show_data': json.dumps(show_data, indent=4),
@@ -158,7 +158,7 @@ class UpdateJSON(View):
                         'script_block': script_block,
                         'error': read_err
                     }
-                    return render(request, 'index.html', context)
+                    return render(request, 'update_json.html', context)
                 else:
                     updated_data = json.loads(read_data)
 
@@ -167,14 +167,21 @@ class UpdateJSON(View):
                 with open(os.path.join(settings.MEDIA_ROOT, filename), 'w') as f:
                     f.write(json.dumps(show_data, indent=4))
 
-                context = {'filename': filename, 'show_data': json.dumps(show_data, indent=4), 'keys_to_update': ', '.join(temp_keys), 'script_block': script_block}
-                return render(request, 'index.html', context)
+                context = {
+                    'filename': filename,
+                    'show_data': json.dumps(show_data, indent=4),
+                    'keys_to_update': ', '.join(temp_keys),
+                    'script_block': script_block
+                }
+                return render(request, 'update_json.html', context)
             except IsADirectoryError as e:
-                return render(request, 'index.html', {'error': 'Please upload a file before proceed!'})
+                context = {'error': 'Please upload a file before proceed!'}
+                return render(request, 'update_json.html', context)
             except Exception as e:
-                return render(request, 'index.html', {'error': e})
+                context = {'error': e}
+                return render(request, 'update_json.html', context)
 
-        return render(request, 'index.html', {'error': 'Invalid action!'})
+        return render(request, 'update_json.html', {'error': 'Invalid action!'})
 
 
 def download(request, path):
@@ -188,3 +195,123 @@ def download(request, path):
     except:
         pass
     raise Http404
+
+
+class UpdateMergeSection(View):
+
+    def get(self, request):
+        return render(request, 'update_merge_section.html')
+
+    def post(self, request):
+        action = request.POST.get('action')
+        if action == '1':
+            try:
+                temp_file = request.FILES['json_file']
+                if os.path.exists(os.path.join(settings.MEDIA_ROOT, temp_file.name)):
+                    os.remove(os.path.join(settings.MEDIA_ROOT, temp_file.name))
+
+                file_system_storage = FileSystemStorage()
+                filename = file_system_storage.save(temp_file.name, temp_file)
+
+                with open(os.path.join(settings.MEDIA_ROOT, filename), 'r') as f:
+                    show_data = f.read()
+
+                data = json.loads(show_data)
+                merge_data = data.get('merge', None)
+                if merge_data:
+                    merge_data_to_display = []
+                    for i in merge_data:
+                        if type(i["replace"]) is str:
+                            merge_data_to_display.append(f'{i["find"]} = "{i["replace"]}"')
+                        else:
+                            merge_data_to_display.append(f'{i["find"]} = {i["replace"]}')
+                else:
+                    merge_data_to_display = []
+
+                context = {
+                    'filename': filename,
+                    'show_data': 'merge: '+json.dumps(merge_data, indent=4),
+                    'script_block': '\n'.join(merge_data_to_display)
+                }
+                if not merge_data:
+                    context['error'] = 'Invalid json file uploaded, It does not contain "merge" block!'
+                return render(request, 'update_merge_section.html', context)
+            except Exception as e:
+                return render(request, 'update_merge_section.html', {'error': str(e)})
+
+        elif action == '3':
+            try:
+                filename = request.POST.get('filename')
+                script_block = request.POST.get('script_block')
+
+                with open(os.path.join(settings.MEDIA_ROOT, filename), 'r') as f:
+                    show_data = json.loads(f.read())
+
+                script_block_vars = []
+                script_block_lines = script_block.split("\n")
+                for i in script_block_lines:
+                    if i and "=" in i:
+                        vn = i.split("=")[0]
+                        if vn:
+                            for j in [' ', '+', '-', '%', '/', '*', '//', '**']:
+                                vn = vn.replace(j, "")
+                            script_block_vars.append(vn)
+
+                script_block_vars = set(script_block_vars)
+                script_name = os.path.join(settings.MEDIA_ROOT, filename + '_script.py')
+                script_name = script_name.replace('(', '').replace(')', '').replace(' ', '')
+
+                with open(script_name, 'w') as f:
+                    for line in script_block_lines:
+                        if not 'print(' in line:
+                            f.write(line)
+
+                    dict_str = '\ndata = {'
+                    for i in script_block_vars:
+                        dict_str += f'"{i}": {i}, '
+                    dict_str += '}\n'
+
+                    f.write(dict_str)
+                    f.write('\nimport json')
+                    f.write('\nprint(json.dumps(data))\n')
+
+                # this will run the shell command `cat me` and capture stdout and stderr
+                proc = Popen(["python3", script_name], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                # this will wait for the process to finish.
+                proc.wait()
+                read_data = proc.stdout.read().decode()
+                print(read_data)
+                read_err = proc.stderr.read().decode()
+                if read_err:
+                    context = {
+                        'filename': filename,
+                        'show_data': {},
+                        'script_block': script_block,
+                        'error': read_err
+                    }
+                    return render(request, 'update_merge_section.html', context)
+                else:
+                    updated_data = json.loads(read_data)
+                    merge_data = show_data.get('merge', None)
+                    if merge_data:
+                        for i in merge_data:
+                            if i['find'] in updated_data:
+                                i['replace'] = updated_data[i['find']]
+
+                show_data['merge'] = merge_data
+
+                with open(os.path.join(settings.MEDIA_ROOT, filename), 'w') as f:
+                    f.write(json.dumps(show_data, indent=4))
+
+                context = {
+                    'filename': filename,
+                    'show_data': 'merge: ' + json.dumps(merge_data, indent=4),
+                    'script_block': script_block
+                }
+                return render(request, 'update_merge_section.html', context)
+            except IsADirectoryError as e:
+                return render(request, 'update_merge_section.html', {'error': 'Please upload a file before proceed!'})
+            except Exception as e:
+                return render(request, 'update_merge_section.html', {'error': e})
+
+        return render(request, 'update_merge_section.html', {'error': 'Invalid action!'})

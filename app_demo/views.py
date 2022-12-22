@@ -125,18 +125,27 @@ class UpdateJSON(View):
                         if not f:
                             keys_to_update.append(i)
 
-                temp = script_block.split("\n")
-                l = [i.split("=")[0].strip().replace(" ", "") for i in temp if i and "=" in i]
-                s = set([i for i in l if i.isalpha() or i.isalnum()])
+                script_block_lines = script_block.split("\n")
+                script_block_vars = []
+                for i in script_block_lines:
+                    if i and "=" in i:
+                        vn = i.split("=")[0]
+                        if vn:
+                            for j in [' ', '+', '-', '%', '/', '*', '//', '**']:
+                                vn = vn.replace(j, "")
+                            script_block_vars.append(vn)
+                script_block_vars = set(script_block_vars)
 
                 script_name = os.path.join(settings.MEDIA_ROOT, filename + '_script.py')
                 script_name = script_name.replace('(', '').replace(')', '').replace(' ', '')
 
                 with open(script_name, 'w') as f:
-                    f.write(script_block)
+                    for line in script_block_lines:
+                        if not 'print(' in line:
+                            f.write(line)
 
                     dict_str = '\ndata = {'
-                    for i in s:
+                    for i in script_block_vars:
                         dict_str += f'"{i}": {i}, '
                     dict_str += '}\n'
 
@@ -280,7 +289,6 @@ class UpdateMergeSection(View):
                 # this will wait for the process to finish.
                 proc.wait()
                 read_data = proc.stdout.read().decode()
-                print(read_data)
                 read_err = proc.stderr.read().decode()
                 if read_err:
                     context = {

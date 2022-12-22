@@ -38,8 +38,6 @@
                     <input type="hidden" name="filename" value="{{filename}}" />
                     <div class="form-group">
                         <input type="file" name="json_file">
-                        <br>
-                        <button disabled="true" type="button" id="btn_upload" class="btn btn-primary">Upload</button>
                         {% if filename %}
                             <h5 style="display:inline-block;color:red;">UPLOADED FILE: {{filename}}</h5>
                         {% endif %}
@@ -104,7 +102,9 @@
                 if(this.value==''){
                     $("#btn_upload").prop('disabled', true);
                 }else{
-                    $("#btn_upload").prop('disabled', false);
+                    $("#action").val("1");
+                    $("#form1")[0].submit();
+                    // $("#btn_upload").prop('disabled', false);
                 }
             }
 

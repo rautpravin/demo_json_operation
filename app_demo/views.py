@@ -2,6 +2,8 @@ import os
 import json
 import subprocess
 from subprocess import Popen
+
+import django.template
 from django.shortcuts import render
 from django.views import View
 from django.conf import settings
@@ -60,127 +62,67 @@ class UpdateJSON(View):
 
                 file_system_storage = FileSystemStorage()
                 filename = file_system_storage.save(temp_file.name, temp_file)
-                # uploaded_file_url = file_system_storage.url(filename)
+
                 with open(os.path.join(settings.MEDIA_ROOT, filename), 'r') as f:
                     show_data = f.read()
+                    json_data = json.loads(show_data)
+                    merge_data = json_data.get('merge', None)
+                    dynamic_fields = []
+                    for md in merge_data:
+                        v = md['replace']
+                        if type(v) == str:
+                            dynamic_fields.append({'field_name_display': md['find'], 'field_name': md['find']+":::str", 'field_value': v})
+                        else:
+                            dynamic_fields.append({'field_name_display': md['find'], 'field_name': md['find']+":::num", 'field_value': v})
 
                 return render(request, 'update_json.html', {
-                    'filename': filename, 'show_data': show_data
+                    'filename': filename, 'show_data': show_data, 'dynamic_fields': dynamic_fields
                 })
             except Exception as e:
                 return render(request, 'update_json.html', {'error': str(e)})
 
-        elif action == '2':
-            try:
-                keys_to_update = request.POST.get('keys_to_update')
-                keys_to_update = [i.strip() for i in keys_to_update.split(',') if i]
-                filename = request.POST.get('filename')
-
-                if not os.path.exists(os.path.join(settings.MEDIA_ROOT, filename)):
-                    return render(request, 'update_json.html', {'error', 'file not exists!'})
-
-                with open(os.path.join(settings.MEDIA_ROOT, filename), 'r') as f:
-                    show_data = f.read()
-                    data = json.loads(show_data)
-                    s = ''
-                    for key in keys_to_update:
-                        extracted_data = json_extract(data, key)
-                        extracted_data = extracted_data[0] if extracted_data else ''
-                        if type(extracted_data) is str:
-                            extracted_data = f'"{extracted_data}"'
-                        s += key + ' = '+str(extracted_data) + '\n'
-
-                    return render(request, 'update_json.html', {
-                        'filename': filename, 'keys_to_update': ', '.join(keys_to_update), 'show_data': show_data, 'script_block': s
-                    })
-            except IsADirectoryError as e:
-                return render(request, 'update_json.html', {'error': 'Please upload a file before proceed!'})
-            except Exception as e:
-                return render(request, 'update_json.html', {'error': e})
-
         elif action == '3':
             try:
-                temp_keys = request.POST.get('keys_to_update', '')
+                key_vals_to_update = {}
+                dynamic_data = zip(request.POST.getlist('key'), request.POST.getlist('value'))
+                for i in dynamic_data:
+                    d_key = i[0]
+                    d_val = i[1]
+                    if d_key.split(':::')[1] != 'str':
+                        d_val = float(d_val) if '.' in d_val else int(d_val)
+                    key_vals_to_update[d_key.split(':::')[0]] = d_val
+
                 filename = request.POST.get('filename')
-                script_block = request.POST.get('script_block')
 
                 with open(os.path.join(settings.MEDIA_ROOT, filename), 'r') as f:
                     show_data = json.loads(f.read())
 
-                if not temp_keys.strip():
-                    return render(request, 'update_json.html', {
-                        'filename': filename,
-                        'keys_to_update': ', '.join(script_block),
-                        'show_data': json.dumps(show_data, indent=4),
-                        'script_block': script_block,
-                        'error': 'please add atleast 1 key to update.'
-                    })
+                merge_data = show_data['merge']
+                for k, v in key_vals_to_update.items():
+                    for md in merge_data:
+                        if md['find'] == k:
+                            md['replace'] = v
 
-                temp_keys = [i.strip() for i in temp_keys.split(',') if i]
-                keys_to_update = []
-                for i in temp_keys:
-                    i = i.strip()
-                    if '=' in i:
-                        f = '==' in i or '!=' in i or '>=' in i or '<=' in i or '!=' in i or 'in' in i or 'not' in i
-                        if not f:
-                            keys_to_update.append(i)
-
-                script_block_lines = script_block.split("\n")
-                script_block_vars = []
-                for i in script_block_lines:
-                    if i and "=" in i:
-                        vn = i.split("=")[0]
-                        if vn:
-                            for j in [' ', '+', '-', '%', '/', '*', '//', '**']:
-                                vn = vn.replace(j, "")
-                            script_block_vars.append(vn)
-                script_block_vars = set(script_block_vars)
-
-                script_name = os.path.join(settings.MEDIA_ROOT, filename + '_script.py')
-                script_name = script_name.replace('(', '').replace(')', '').replace(' ', '')
-
-                with open(script_name, 'w') as f:
-                    for line in script_block_lines:
-                        if not 'print(' in line:
-                            f.write(line)
-
-                    dict_str = '\ndata = {'
-                    for i in script_block_vars:
-                        dict_str += f'"{i}": {i}, '
-                    dict_str += '}\n'
-
-                    f.write(dict_str)
-                    f.write('\nimport json')
-                    f.write('\nprint(json.dumps(data))\n')
-
-                # this will run the shell command `cat me` and capture stdout and stderr
-                proc = Popen(["python3", script_name], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                # this will wait for the process to finish.
-                proc.wait()
-                read_data = proc.stdout.read().decode()
-                read_err = proc.stderr.read().decode()
-                if read_err:
-                    context = {
-                        'filename': filename,
-                        'show_data': {},
-                        'keys_to_update': ', '.join(temp_keys),
-                        'script_block': script_block,
-                        'error': read_err
-                    }
-                    return render(request, 'update_json.html', context)
-                else:
-                    updated_data = json.loads(read_data)
-
-                show_data = update_data(data=show_data, updated_data=updated_data)
-
+                show_data['merge'] = merge_data
                 with open(os.path.join(settings.MEDIA_ROOT, filename), 'w') as f:
                     f.write(json.dumps(show_data, indent=4))
 
+                with open(os.path.join(settings.MEDIA_ROOT, filename), 'r') as f:
+                    show_data = json.loads(f.read())
+                    merge_data = show_data.get('merge', None)
+                    dynamic_fields = []
+                    for md in merge_data:
+                        v = md['replace']
+                        if type(v) == str:
+                            dynamic_fields.append({'field_name_display': md['find'], 'field_name': md['find'] + ":::str", 'field_value': v})
+                        else:
+                            dynamic_fields.append({'field_name_display': md['find'], 'field_name': md['find'] + ":::num", 'field_value': v})
+
                 context = {
                     'filename': filename,
-                    'show_data': json.dumps(show_data, indent=4),
-                    'keys_to_update': ', '.join(temp_keys),
-                    'script_block': script_block
+                    # 'show_data': json.dumps(show_data, indent=4),
+                    'show_data': 'merge: '+ json.dumps(merge_data, indent=4),
+                    'dynamic_fields': dynamic_fields
                 }
                 return render(request, 'update_json.html', context)
             except IsADirectoryError as e:
@@ -195,12 +137,20 @@ class UpdateJSON(View):
 
 def download(request, path):
     try:
-        file_path = os.path.join(settings.MEDIA_ROOT, path)
-        if os.path.exists(file_path):
-            with open(file_path, 'rb') as fh:
-                response = HttpResponse(fh.read(), content_type="application/force-download")  # content_type="application/json")
-                response['Content-Disposition'] = 'inline; filename=' + os.path.basename(file_path)
-                return response
+        from django.template import loader
+        if request.GET.get('sd') == "1":
+            file_data = loader.get_template('sample.json').render()
+            response = HttpResponse(file_data, content_type="application/force-download")
+            response['Content-Disposition'] = 'inline;'
+            return response
+        else:
+            file_path = os.path.join(settings.MEDIA_ROOT, path)
+            if os.path.exists(file_path):
+                with open(file_path, 'rb') as fh:
+                    file_data = fh.read()
+                    response = HttpResponse(file_data, content_type="application/force-download")
+                    response['Content-Disposition'] = 'inline; filename=' + os.path.basename(file_path)
+                    return response
     except:
         pass
     raise Http404

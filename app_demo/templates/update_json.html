@@ -25,13 +25,14 @@
     <div class="container-fluid">
         <div class="row" style="background: rgb(100, 100, 100);">
             <div class="col-sm-12">
-                <a href="{% url 'index' %}" class="btn btn-primary">Edit JSON</a>
-                <a href="{% url 'merge-sec' %}" class="btn btn-primary">Edit Merge-Sec</a>
+                <a href="{% url 'download' 'sample.json' %}?sd=1" class="btn btn-primary">Download Sample File</a>
+                <a href="{% url 'index' %}" class="btn btn-primary">Edit Values</a>
+                <a href="{% url 'merge-sec' %}" class="btn btn-primary">Calculate Values</a>
             </div>
         </div>
         <div class="row">
             <div class="col-sm-12 col-md-6">
-                <h3>JSON Operation</h3>
+                <h3>Record</h3>
                 <form id="form1" class='well well-sm' method="post" enctype="multipart/form-data">
                     {% csrf_token %}
                     <input type="hidden" id="action" name="action" />
@@ -42,18 +43,16 @@
                             <h5 style="display:inline-block;color:red;">UPLOADED FILE: {{filename}}</h5>
                         {% endif %}
                     </div>
-                    <br>
-                    <div class="form-group">
-                        <label>Enter comma separated keys to update:</label>
-                        <textarea class="form-control" name="keys_to_update" rows="3" style="resize:none;">{{keys_to_update}}</textarea>
+                    <hr>
+                    {% for dynamic_field in dynamic_fields %}
+                    <div class="form-group row">
+                        <label class="col-xs-6 col-sm-4">{{dynamic_field.field_name_display}}</label>
+                        <div class="col-xs-6 col-sm-8">
+                            <input type="text" class="form-control" name="key" value="{{dynamic_field.field_name}}" style="display:none;width:0px;">
+                            <input type="text" class="form-control" name="value" value="{{dynamic_field.field_value}}">
+                        </div>
                     </div>
-                    <div class="form-group text-right">
-                        <button type="button" id="btn_load_vals" class="btn btn-success">Load Vals</button>
-                    </div>
-                    <div class="form-group">
-                        <label>vals:</label>
-                        <textarea class="form-control" name="script_block" rows="10" style="resize:none;">{{script_block}}</textarea>
-                    </div>
+                    {% endfor %}
                     <div class="form-group text-right">
                         <button type="button" id="btn_execute" class="btn btn-danger">Execute</button>
                     </div>
@@ -62,9 +61,9 @@
 
             <div class="col-md-6">
                 <h3>
-                    Data
+                    Data Preview
                     {% if filename %}
-                    <a id="link_download" class="btn btn-default" target="_blank" href="{% url 'download' filename %}">Download {{filename}}</a>
+                    <a id="link_download" class="btn btn-xs btn-success" target="_blank" href="{% url 'download' filename %}">Download {{filename}}</a>
                     {% endif %}
                 </h3>
                 <textarea name="show_data" id="show_data" class="form-control" disabled style="resize: none;" rows="27">{{show_data}}</textarea>
@@ -110,11 +109,6 @@
 
             $("#btn_upload").click(function(){
                 $("#action").val("1");
-                $("#form1")[0].submit();
-            });
-
-            $("#btn_load_vals").click(function(){
-                $("#action").val("2");
                 $("#form1")[0].submit();
             });
 

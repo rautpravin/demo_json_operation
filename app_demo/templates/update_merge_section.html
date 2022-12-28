@@ -25,8 +25,9 @@
     <div class="container-fluid">
         <div class="row" style="background: rgb(100, 100, 100);">
             <div class="col-sm-12">
-                <a href="{% url 'index' %}" class="btn btn-primary">Edit JSON</a>
-                <a href="{% url 'merge-sec' %}" class="btn btn-primary">Edit Merge-Sec</a>
+                <a href="{% url 'download' 'sample.json' %}?sd=1" class="btn btn-primary">Download Sample File</a>
+                <a href="{% url 'index' %}" class="btn btn-primary">Edit Values</a>
+                <a href="{% url 'merge-sec' %}" class="btn btn-primary">Calculate Values</a>
             </div>
         </div>
         <div class="row">
